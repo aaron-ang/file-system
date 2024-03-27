@@ -1,5 +1,11 @@
 #ifndef INCLUDE_FS_H
 #define INCLUDE_FS_H
+
+#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 
 int make_fs(const char *disk_name);
