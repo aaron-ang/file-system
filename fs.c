@@ -129,8 +129,9 @@ int mount_fs(const char *disk_name) {
     return -1;
   }
 
-  // read super block
   union fs_block block;
+
+  // read super block
   if (block_read(0, &block)) {
     fprintf(stderr, "mount_fs: failed to read super block\n");
     return -1;
@@ -181,6 +182,47 @@ int mount_fs(const char *disk_name) {
 int umount_fs(const char *disk_name) {
   if (is_mounted == false) {
     fprintf(stderr, "fs_create: file system not mounted\n");
+    return -1;
+  }
+
+  union fs_block block;
+
+  // write super block
+  block.super = sb;
+  if (block_write(0, &block)) {
+    fprintf(stderr, "umount_fs: failed to write super block\n");
+    return -1;
+  }
+
+  // write directory table
+  memset(&block, 0, BLOCK_SIZE);
+  memcpy(block.dir, dir, sizeof(dir));
+  if (block_write(sb.dir_table_offset, &block)) {
+    fprintf(stderr, "umount_fs: failed to write directory table\n");
+    return -1;
+  }
+
+  // write inode bitmap
+  memset(&block, 0, BLOCK_SIZE);
+  memcpy(block.inode_bitmap, inode_bitmap, sizeof(inode_bitmap));
+  if (block_write(sb.inode_metadata_offset, &block)) {
+    fprintf(stderr, "umount_fs: failed to write inode bitmap\n");
+    return -1;
+  }
+
+  // write used block bitmap
+  memset(&block, 0, BLOCK_SIZE);
+  memcpy(block.used_block_bitmap, used_block_bitmap, sizeof(used_block_bitmap));
+  if (block_write(sb.used_block_bitmap_offset, &block)) {
+    fprintf(stderr, "umount_fs: failed to write used block bitmap\n");
+    return -1;
+  }
+
+  // write inodes
+  memset(&block, 0, BLOCK_SIZE);
+  memcpy(block.inodes, inodes, sizeof(inodes));
+  if (block_write(sb.inode_offset, &block)) {
+    fprintf(stderr, "umount_fs: failed to write inodes\n");
     return -1;
   }
 
