@@ -357,7 +357,10 @@ int fs_create(const char *name) {
     fprintf(stderr, "fs_create: file already exists\n");
     return -1;
   }
-  if (memcmp(inode_bitmap, "\xff", sizeof(inode_bitmap)) == 0) {
+
+  uint8_t full_inode_bitmap[sizeof(inode_bitmap)];
+  memset(full_inode_bitmap, 0xff, sizeof(inode_bitmap));
+  if (memcmp(inode_bitmap, full_inode_bitmap, sizeof(inode_bitmap)) == 0) {
     fprintf(stderr, "fs_create: root directory is full\n");
     return -1;
   }
