@@ -181,7 +181,7 @@ int mount_fs(const char *disk_name) {
 
 int umount_fs(const char *disk_name) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "umount_fs: file system not mounted\n");
     return -1;
   }
 
@@ -238,7 +238,7 @@ int umount_fs(const char *disk_name) {
 
 int fs_open(const char *name) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_open: file system not mounted\n");
     return -1;
   }
   int file_index = get_file_index(name);
@@ -261,7 +261,7 @@ int fs_open(const char *name) {
 
 int fs_close(int fildes) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_close: file system not mounted\n");
     return -1;
   }
   struct file_descriptor fd = fds[fildes];
@@ -301,7 +301,7 @@ int fs_create(const char *name) {
 
 int fs_delete(const char *name) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_delete: file system not mounted\n");
     return -1;
   }
   int i = get_file_index(name);
@@ -322,7 +322,7 @@ int fs_delete(const char *name) {
 
 int fs_read(int fildes, void *buf, size_t nbyte) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_read: file system not mounted\n");
     return -1;
   }
   return 0;
@@ -330,7 +330,7 @@ int fs_read(int fildes, void *buf, size_t nbyte) {
 
 int fs_write(int fildes, void *buf, size_t nbyte) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_write: file system not mounted\n");
     return -1;
   }
   // TODO: read first before writing
@@ -383,7 +383,7 @@ int fs_lseek(int fildes, off_t offset) {
 
 int fs_truncate(int fildes, off_t length) {
   if (is_mounted == false) {
-    fprintf(stderr, "fs_create: file system not mounted\n");
+    fprintf(stderr, "fs_truncate: file system not mounted\n");
     return -1;
   }
   // TODO: truncate file
