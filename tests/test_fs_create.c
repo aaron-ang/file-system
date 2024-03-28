@@ -1,6 +1,5 @@
 #include "../fs.h"
 #include <assert.h>
-#include <unistd.h>
 
 int main() {
   const char *disk_name = "test_fs";
@@ -13,7 +12,7 @@ int main() {
       "56", "57", "58", "59", "60", "61", "62", "63", "64",
   };
 
-  remove(disk_name);                            // remove disk if it exists
+  remove(disk_name);
   assert(make_fs(disk_name) == 0);              // create disk
   assert(fs_create(file_names[0]) == -1);       // disk not mounted
   assert(mount_fs(disk_name) == 0);             // mount the disk
