@@ -2,7 +2,7 @@ override CFLAGS := -Wall -Werror -std=gnu99 -pedantic -O0 -g $(CFLAGS)
 override LDLIBS := $(LDLIBS)
 
 TESTDIR=tests
-test_files=test_make_fs
+test_files=test_make_fs test_mount_fs
 
 test_files := $(addprefix $(TESTDIR)/,$(test_files))
 objects := $(addsuffix .o,$(test_files))
