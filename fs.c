@@ -11,12 +11,7 @@
 #define DIR_ENTRIES_PER_BLOCK (BLOCK_SIZE / sizeof(struct dir_entry))
 #define METADATA_BLOCKS 5
 #define MAX_FD 32
-#define min(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a < _b ? _a : _b;                                                         \
-  })
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 struct super_block {
   uint16_t dir_table_offset;
@@ -436,8 +431,8 @@ int fs_read(int fildes, void *buf, size_t nbyte) {
       offset_in_block = 0;
     }
     size_t bytes_to_read = nbyte - bytes_read;
-    bytes_to_read = min(bytes_to_read, BLOCK_SIZE - offset_in_block);
-    memcpy(buf + bytes_read, block_buffer.data + offset_in_block,
+    bytes_to_read = MIN(bytes_to_read, BLOCK_SIZE - offset_in_block);
+    memcpy((char *)buf + bytes_read, block_buffer.data + offset_in_block,
            bytes_to_read);
     bytes_read += bytes_to_read;
     offset_in_block += bytes_to_read;
