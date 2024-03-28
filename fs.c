@@ -4,10 +4,19 @@
 #define MAX_FILES 64
 #define MAX_FILE_SIZE ((1 << 20) * 20) // 20 MB
 #define MAX_FILE_NAME_CHAR 16
-#define DIRECT_OFFSETS_PER_INODE 10
+#define DIRECT_OFFSETS_PER_INODE 12
+#define DIRECT_OFFSETS_PER_BLOCK (BLOCK_SIZE / sizeof(uint16_t))
 #define INODE_SIZE sizeof(struct inode)
 #define INODES_PER_BLOCK (BLOCK_SIZE / INODE_SIZE)
+#define DIR_ENTRIES_PER_BLOCK (BLOCK_SIZE / sizeof(struct dir_entry))
+#define METADATA_BLOCKS 5
 #define MAX_FD 32
+#define min(a, b)                                                              \
+  ({                                                                           \
+    __typeof__(a) _a = (a);                                                    \
+    __typeof__(b) _b = (b);                                                    \
+    _a < _b ? _a : _b;                                                         \
+  })
 
 struct super_block {
   uint16_t dir_table_offset;
@@ -26,22 +35,23 @@ struct inode {
 
 struct dir_entry {
   bool is_used;
-  int inode_number;
+  uint16_t inode_number;
   const char *name;
 };
 
 struct file_descriptor {
   bool is_used;
-  int inode_number;
+  uint16_t inode_number;
   int offset;
 };
 
 union fs_block {
   struct super_block super;
-  struct dir_entry dir[BLOCK_SIZE / sizeof(struct dir_entry)];
+  struct dir_entry dir[DIR_ENTRIES_PER_BLOCK];
   uint8_t inode_bitmap[MAX_FILES / CHAR_BIT];
   uint8_t used_block_bitmap[DISK_BLOCKS / CHAR_BIT];
-  struct inode inodes[BLOCK_SIZE / INODE_SIZE];
+  struct inode inodes[INODES_PER_BLOCK];
+  uint16_t block_offsets[DIRECT_OFFSETS_PER_BLOCK];
   char data[BLOCK_SIZE];
 };
 
@@ -58,6 +68,7 @@ struct file_descriptor fds[MAX_FD];
 
 // Helper functions
 
+// Returns the index of the file in the directory table.
 int get_file_index(const char *name) {
   for (int i = 0; i < MAX_FILES; i++) {
     if (dir[i].is_used && strcmp(dir[i].name, name) == 0) {
@@ -75,6 +86,56 @@ void bitmap_set(uint8_t *bitmap, int idx, bool val) {
   if (bitmap_test(bitmap, idx) == val)
     return;
   bitmap[idx / CHAR_BIT] ^= 1 << (idx % CHAR_BIT);
+}
+
+// Returns the block number of the data block at the given file offset.
+// Returns -1 if the block is not allocated
+int get_data_block_offset(uint16_t inum, int file_offset) {
+  assert(inum >= 0 && inum < MAX_FILES);
+  assert(file_offset >= 0 && file_offset < MAX_FILE_SIZE);
+
+  struct inode inode = inodes[inum];
+  uint16_t block_num;
+  int block_offset = file_offset / BLOCK_SIZE;
+
+  // direct offset
+  if (block_offset < DIRECT_OFFSETS_PER_INODE) {
+    block_num = inode.direct_offset[block_offset];
+    return block_num == 0 ? -1 : block_num;
+  }
+
+  union fs_block block;
+  block_offset -= DIRECT_OFFSETS_PER_INODE;
+
+  // single indirect
+  if (block_offset < DIRECT_OFFSETS_PER_BLOCK) {
+    assert(inode.single_indirect_offset != 0);
+    if (block_read(inode.single_indirect_offset, &block)) {
+      fprintf(stderr,
+              "get_data_block_offset: failed to read single indirect block\n");
+      return -1;
+    }
+    block_num = block.block_offsets[block_offset];
+    return block_num == 0 ? -1 : block_num;
+  }
+
+  // double indirect
+  block_offset -= DIRECT_OFFSETS_PER_BLOCK;
+  assert(inode.double_indirect_offset != 0);
+  if (block_read(inode.double_indirect_offset, &block)) {
+    fprintf(stderr,
+            "get_data_block_offset: failed to read double indirect block\n");
+    return -1;
+  }
+  block_offset /= DIRECT_OFFSETS_PER_BLOCK;
+  if (block_read(block.block_offsets[block_offset], &block)) {
+    fprintf(stderr,
+            "get_data_block_offset: failed to read double indirect block\n");
+    return -1;
+  }
+  block_offset %= DIRECT_OFFSETS_PER_BLOCK;
+  block_num = block.block_offsets[block_offset];
+  return block_num == 0 ? -1 : block_num;
 }
 
 // Library functions
@@ -104,8 +165,7 @@ int make_fs(const char *disk_name) {
   }
 
   // write used block bitmap
-  int metadata_blocks = 4;
-  for (int i = 0; i < metadata_blocks; i++) {
+  for (int i = 0; i < METADATA_BLOCKS; i++) {
     bitmap_set(used_block_bitmap, i, 1);
   }
   memset(&block, 0, BLOCK_SIZE);
@@ -144,7 +204,6 @@ int mount_fs(const char *disk_name) {
   sb = sb_slice;
 
   // read directory table
-  memset(&block, 0, BLOCK_SIZE);
   if (block_read(sb_slice.dir_table_offset, &block)) {
     fprintf(stderr, "mount_fs: failed to read directory table\n");
     return -1;
@@ -152,7 +211,6 @@ int mount_fs(const char *disk_name) {
   memcpy(dir, block.dir, sizeof(dir));
 
   // read inode bitmap
-  memset(&block, 0, BLOCK_SIZE);
   if (block_read(sb_slice.inode_metadata_offset, &block)) {
     fprintf(stderr, "mount_fs: failed to read inode bitmap\n");
     return -1;
@@ -160,15 +218,13 @@ int mount_fs(const char *disk_name) {
   memcpy(inode_bitmap, block.inode_bitmap, sizeof(inode_bitmap));
 
   // read used block bitmap
-  memset(&block, 0, BLOCK_SIZE);
   if (block_read(sb_slice.used_block_bitmap_offset, &block)) {
     fprintf(stderr, "mount_fs: failed to read used block bitmap\n");
     return -1;
   }
   memcpy(used_block_bitmap, block.used_block_bitmap, sizeof(used_block_bitmap));
 
-  // read inodes
-  memset(&block, 0, BLOCK_SIZE);
+  // read inode table
   if (block_read(sb_slice.inode_offset, &block)) {
     fprintf(stderr, "mount_fs: failed to read inodes\n");
     return -1;
@@ -218,7 +274,7 @@ int umount_fs(const char *disk_name) {
     return -1;
   }
 
-  // write inodes
+  // write inode table
   memset(&block, 0, BLOCK_SIZE);
   memcpy(block.inodes, inodes, sizeof(inodes));
   if (block_write(sb.inode_offset, &block)) {
@@ -325,7 +381,45 @@ int fs_read(int fildes, void *buf, size_t nbyte) {
     fprintf(stderr, "fs_read: file system not mounted\n");
     return -1;
   }
-  return 0;
+  struct file_descriptor fd = fds[fildes];
+  if (fd.is_used == false) {
+    fprintf(stderr, "fs_read: invalid file descriptor\n");
+    return -1;
+  }
+  int block_offset = get_data_block_offset(fd.inode_number, fd.offset);
+  if (block_offset < 0) {
+    fprintf(stderr, "fs_read: no data block found for offset\n");
+    return -1;
+  }
+
+  union fs_block block;
+  if (block_read(block_offset, &block)) {
+    fprintf(stderr, "fs_read: failed to read data block\n");
+    return -1;
+  }
+  uint16_t offset_in_block = fd.offset % BLOCK_SIZE;
+  size_t bytes_read = 0;
+  while (bytes_read < nbyte) {
+    if (offset_in_block == BLOCK_SIZE) {
+      // read next data block
+      block_offset = get_data_block_offset(fd.inode_number, block_offset);
+      if (block_offset < 0) {
+        break;
+      }
+      if (block_read(block_offset, &block)) {
+        fprintf(stderr, "fs_read: failed to read data block\n");
+        return -1;
+      }
+      offset_in_block = 0;
+    }
+    size_t bytes_to_read = nbyte - bytes_read;
+    bytes_to_read = min(bytes_to_read, BLOCK_SIZE - offset_in_block);
+    memcpy(buf + bytes_read, block.data + offset_in_block, bytes_to_read);
+    bytes_read += bytes_to_read;
+    offset_in_block += bytes_to_read;
+  }
+  fd.offset += bytes_read;
+  return bytes_read;
 }
 
 int fs_write(int fildes, void *buf, size_t nbyte) {
@@ -386,6 +480,16 @@ int fs_truncate(int fildes, off_t length) {
     fprintf(stderr, "fs_truncate: file system not mounted\n");
     return -1;
   }
-  // TODO: truncate file
+  struct file_descriptor fd = fds[fildes];
+  if (fd.is_used == false) {
+    fprintf(stderr, "fs_truncate: invalid file descriptor\n");
+    return -1;
+  }
+  int file_size = inodes[fd.inode_number].file_size;
+  if (length < 0 || length > file_size) {
+    fprintf(stderr, "fs_truncate: invalid length\n");
+    return -1;
+  }
+  // TODO: free data blocks
   return 0;
 }

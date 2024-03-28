@@ -3,10 +3,16 @@
 ## Layout of blocks
 
 First block: super block
+
 Second block: directory table
+
 Third block: inode bitmap
+
 Fourth block: data bitmap
-Remaining blocks (in order): inode table, data block(s)
+
+Fifth block: inode table
+
+Remaining: data blocks
 
 ## Configuration
 

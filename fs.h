@@ -1,6 +1,7 @@
 #ifndef INCLUDE_FS_H
 #define INCLUDE_FS_H
 
+#include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>

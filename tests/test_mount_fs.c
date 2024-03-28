@@ -1,5 +1,6 @@
 #include "../fs.h"
 #include <assert.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 int main() {
@@ -14,14 +15,15 @@ int main() {
   fp = fopen(disk_name, "r");
   assert(fp != NULL);
 
-  int non_zero_bytes = 0;
+  bool non_zero_byte = false;
   char byte;
   while ((byte = fgetc(fp)) != EOF) {
     if (byte != 0) {
-      non_zero_bytes++;
+      non_zero_byte = true;
+      break;
     }
   }
-  assert(non_zero_bytes > 0);
+  assert(non_zero_byte == true);
 
   assert(fclose(fp) == 0);
   assert(unlink(disk_name) == 0);
