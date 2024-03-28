@@ -1,6 +1,6 @@
 #include "../fs.h"
 #include <assert.h>
-#include <unistd.h>
+#include <stdlib.h>
 
 int main() {
   const char *disk_name = "test_fs";
@@ -20,7 +20,11 @@ int main() {
     assert(fs_create(file_names[i]) == 0);
   }
 
-  char ***file_list;
-  assert(fs_listfiles(file_list) == 0);
-  assert(memcmp(file_names, file_list, sizeof(file_names)) == 0);
+  char **file_list = malloc(sizeof(char *) * 64);
+  assert(fs_listfiles(&file_list) == 0);
+  for (int i = 0; i < 64; i++) {
+    assert(strcmp(file_list[i], file_names[i]) == 0);
+    free(file_list[i]);
+  }
+  free(file_list);
 }

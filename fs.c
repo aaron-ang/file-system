@@ -460,7 +460,7 @@ int fs_get_filesize(int fildes) {
 }
 
 int fs_listfiles(char ***files) {
-  char *file = **files;
+  char **file_name_ptr = *files;
   for (int i = 0; i < MAX_FILES; i++) {
     if (dir_table[i].is_used) {
       const char *file_name = dir_table[i].name;
@@ -468,11 +468,11 @@ int fs_listfiles(char ***files) {
         fprintf(stderr, "fs_listfiles: invalid file name\n");
         return -1;
       }
-      strcpy(file, file_name);
-      file++;
+      *file_name_ptr = strdup(file_name);
+      file_name_ptr++;
     }
   }
-  file = NULL;
+  *file_name_ptr = NULL;
   return 0;
 }
 
