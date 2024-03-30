@@ -86,6 +86,14 @@ struct dir_entry *claim_dentry(uint16_t inum, const char *name) {
   return NULL;
 }
 
+void clear_dentry(struct dir_entry *dentry) {
+  if (dentry == NULL)
+    return;
+  dentry->is_used = false;
+  dentry->inode_number = -1;
+  dentry->name = NULL;
+}
+
 bool bitmap_test(uint8_t *bitmap, int idx) {
   return bitmap[idx / CHAR_BIT] & (1 << (idx % CHAR_BIT));
 }
@@ -366,26 +374,26 @@ int clear_indirect_block(int block_num, int indirection_level) {
   union fs_block empty_block;
   memset(&empty_block, 0, sizeof(empty_block));
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
-    if (block_buffer.block_offsets[i] == 0) {
-      break;
-    }
-    if (indirection_level) {
-      if (clear_indirect_block(block_buffer.block_offsets[i],
-                               indirection_level - 1)) {
-        fprintf(stderr,
-                "clear_indirect_block: failed to clear indirect block\n");
+    if (block_buffer.block_offsets[i]) {
+      if (indirection_level) {
+        if (clear_indirect_block(block_buffer.block_offsets[i],
+                                 indirection_level - 1)) {
+          fprintf(stderr,
+                  "clear_indirect_block: failed to clear indirect block\n");
+          return -1;
+        }
+      } else if (block_write(block_buffer.block_offsets[i], &empty_block)) {
+        fprintf(stderr, "clear_indirect_block: failed to clear data block %d\n",
+                block_buffer.block_offsets[i]);
         return -1;
       }
-    } else if (block_write(block_buffer.block_offsets[i], &empty_block)) {
-      fprintf(stderr, "clear_indirect_block: failed to clear data block %d\n",
-              block_buffer.block_offsets[i]);
-      return -1;
     }
   }
   if (block_write(block_num, &empty_block)) {
     fprintf(stderr, "clear_indirect_block: failed to clear indirect block\n");
     return -1;
   }
+  bitmap_set(used_block_bitmap, block_num, 0);
   return 0;
 }
 
@@ -629,36 +637,36 @@ int fs_delete(const char *name) {
     }
   }
   struct inode inode = inode_table[dentry->inode_number];
-  inode.file_size = 0;
   union fs_block empty_block;
   memset(&empty_block, 0, BLOCK_SIZE);
   for (int i = 0; i < DIRECT_OFFSETS_PER_INODE; i++) {
-    if (inode.direct_offset[i] == 0) {
-      return 0;
+    if (inode.direct_offset[i]) {
+      if (block_write(inode.direct_offset[i], &empty_block)) {
+        fprintf(stderr, "fs_delete: failed to clear data block %d\n",
+                inode.direct_offset[i]);
+        return -1;
+      }
+      bitmap_set(used_block_bitmap, inode.direct_offset[i], false);
+      inode.direct_offset[i] = 0;
     }
-    if (block_write(inode.direct_offset[i], &empty_block)) {
-      fprintf(stderr, "fs_delete: failed to clear data block %d\n",
-              inode.direct_offset[i]);
+  }
+  if (inode.single_indirect_offset) {
+    if (clear_indirect_block(inode.single_indirect_offset, 0)) {
+      fprintf(stderr, "fs_delete: failed to clear single indirect block\n");
       return -1;
     }
-    inode.direct_offset[i] = 0;
+    inode.single_indirect_offset = 0;
   }
-  if (inode.single_indirect_offset == 0) {
-    return 0;
+  if (inode.double_indirect_offset) {
+    if (clear_indirect_block(inode.double_indirect_offset, 1)) {
+      fprintf(stderr, "fs_delete: failed to clear double indirect block\n");
+      return -1;
+    }
+    inode.double_indirect_offset = 0;
   }
-  if (clear_indirect_block(inode.single_indirect_offset, 0)) {
-    fprintf(stderr, "fs_delete: failed to clear single indirect block\n");
-    return -1;
-  }
-  inode.single_indirect_offset = 0;
-  if (inode.double_indirect_offset == 0) {
-    return 0;
-  }
-  if (clear_indirect_block(inode.double_indirect_offset, 1)) {
-    fprintf(stderr, "fs_delete: failed to clear double indirect block\n");
-    return -1;
-  }
-  inode.double_indirect_offset = 0;
+  bitmap_set(inode_bitmap, dentry->inode_number, 0);
+  clear_dentry(dentry);
+  inode.file_size = 0;
   return 0;
 }
 
