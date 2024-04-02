@@ -51,20 +51,41 @@ struct file_descriptor {
   int offset;
 };
 
-// on-disk and in-memory
+enum indirection_level {
+  SINGLE_INDIRECTION,
+  DOUBLE_INDIRECTION,
+};
+
+// in-memory and on-disk
 struct super_block sb;
 struct dir_entry dir_table[MAX_FILES];
 uint8_t inode_bitmap[MAX_FILES / CHAR_BIT];
 uint8_t used_block_bitmap[DISK_BLOCKS / CHAR_BIT];
 struct inode inode_table[MAX_FILES];
 
-// in-memory
+// in-memory only
 bool is_mounted = false;
 struct file_descriptor fds[MAX_FD];
 
 /*
  * Helper functions
  */
+
+static struct dir_entry *get_dentry(const char *name);
+static struct dir_entry *claim_dentry(uint16_t inum, const char *name);
+static void clear_dentry(struct dir_entry *dentry);
+static bool bitmap_test(const uint8_t *bitmap, int idx);
+static void bitmap_set(uint8_t *bitmap, int idx, bool val);
+static bool bitmap_full(const uint8_t *bitmap, int size);
+static int claim_inum_from_bitmap();
+static int get_unused_data_block();
+static int add_inode_data_block(uint16_t inum, int block_num);
+static int get_data_block_num(uint16_t inum, int file_offset);
+static size_t read_bytes(int block_num, struct file_descriptor *fd, void *buf,
+                         size_t nbyte);
+static size_t write_bytes(int block_num, struct file_descriptor *fd,
+                          const void *buf, size_t nbyte);
+static int clear_indirect_block(int block_num, int indirection_level);
 
 struct dir_entry *get_dentry(const char *name) {
   for (int i = 0; i < MAX_FILES; i++) {
@@ -94,7 +115,7 @@ void clear_dentry(struct dir_entry *dentry) {
   dentry->name = NULL;
 }
 
-bool bitmap_test(uint8_t *bitmap, int idx) {
+bool bitmap_test(const uint8_t *bitmap, int idx) {
   return bitmap[idx / CHAR_BIT] & (1 << (idx % CHAR_BIT));
 }
 
@@ -104,13 +125,13 @@ void bitmap_set(uint8_t *bitmap, int idx, bool val) {
   bitmap[idx / CHAR_BIT] ^= 1 << (idx % CHAR_BIT);
 }
 
-bool bitmap_full(uint8_t *bitmap, int size) {
+bool bitmap_full(const uint8_t *bitmap, int size) {
   uint8_t full_bitmap[size];
   memset(full_bitmap, 0xff, size);
   return memcmp(bitmap, full_bitmap, size) == 0;
 }
 
-int claim_inum() {
+int claim_inum_from_bitmap() {
   for (int i = 0; i < MAX_FILES; i++) {
     if (bitmap_test(inode_bitmap, i) == 0) {
       bitmap_set(inode_bitmap, i, 1);
@@ -234,8 +255,8 @@ int add_inode_data_block(uint16_t inum, int block_num) {
 }
 
 // Returns the block number of the data block at the given file offset.
-// Returns 0 if the block is not allocated
-// Returns -1 on read/write error
+// Returns 0 if the block is not allocated.
+// Returns -1 on read/write error.
 int get_data_block_num(uint16_t inum, int file_offset) {
   assert(inum >= 0 && inum < MAX_FILES);
   assert(file_offset >= 0 && file_offset < MAX_FILE_SIZE);
@@ -313,7 +334,7 @@ size_t read_bytes(int block_num, struct file_descriptor *fd, void *buf,
   return bytes_read;
 }
 
-size_t write_bytes(int block_num, struct file_descriptor *fd, void *buf,
+size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
                    size_t nbyte) {
   union fs_block block_buffer;
   if (block_read(block_num, &block_buffer)) {
@@ -375,7 +396,7 @@ int clear_indirect_block(int block_num, int indirection_level) {
   memset(&empty_block, 0, sizeof(empty_block));
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
     if (block_buffer.block_offsets[i]) {
-      if (indirection_level) {
+      if (indirection_level > SINGLE_INDIRECTION) {
         if (clear_indirect_block(block_buffer.block_offsets[i],
                                  indirection_level - 1)) {
           fprintf(stderr,
@@ -612,7 +633,7 @@ int fs_create(const char *name) {
     fprintf(stderr, "fs_create: root directory is full\n");
     return -1;
   }
-  int inum = claim_inum();
+  int inum = claim_inum_from_bitmap();
   assert(inum != -1);
   struct dir_entry *dentry = claim_dentry(inum, name);
   assert(dentry != NULL);
@@ -651,14 +672,16 @@ int fs_delete(const char *name) {
     }
   }
   if (inode.single_indirect_offset) {
-    if (clear_indirect_block(inode.single_indirect_offset, 0)) {
+    if (clear_indirect_block(inode.single_indirect_offset,
+                             SINGLE_INDIRECTION)) {
       fprintf(stderr, "fs_delete: failed to clear single indirect block\n");
       return -1;
     }
     inode.single_indirect_offset = 0;
   }
   if (inode.double_indirect_offset) {
-    if (clear_indirect_block(inode.double_indirect_offset, 1)) {
+    if (clear_indirect_block(inode.double_indirect_offset,
+                             DOUBLE_INDIRECTION)) {
       fprintf(stderr, "fs_delete: failed to clear double indirect block\n");
       return -1;
     }
@@ -762,12 +785,56 @@ int fs_truncate(int fildes, off_t length) {
     fprintf(stderr, "fs_truncate: invalid file descriptor\n");
     return -1;
   }
-  int file_size = inode_table[fd.inode_number].file_size;
+  struct inode inode = inode_table[fd.inode_number];
+  int file_size = inode.file_size;
   if (length < 0 || length > file_size) {
     fprintf(stderr, "fs_truncate: invalid length\n");
     return -1;
   }
-  // TODO: free data blocks
-  fd.offset = MIN(fd.offset, length);
+  // free data block starting from length
+  off_t offset = length;
+  int cur_block_num;
+  union fs_block block_buffer;
+  while ((cur_block_num = get_data_block_num(fd.inode_number, offset)) > 0) {
+    uint16_t offset_in_block = offset % BLOCK_SIZE;
+    if (block_read(cur_block_num, &block_buffer)) {
+      fprintf(stderr, "fs_truncate: failed to read data block %d\n",
+              cur_block_num);
+      return -1;
+    }
+    memset(block_buffer.data + offset_in_block, 0,
+           BLOCK_SIZE - offset_in_block);
+    if (offset_in_block == 0)
+      bitmap_set(used_block_bitmap, cur_block_num, false);
+    offset += BLOCK_SIZE - offset_in_block;
+  }
+  // walk inode table and free entries starting from length
+  int block_idx = length / BLOCK_SIZE;
+  off_t offset_in_block = length % BLOCK_SIZE;
+  while (block_idx < DIRECT_OFFSETS_PER_INODE) {
+    if (offset_in_block == 0) {
+      inode.direct_offset[block_idx] = 0;
+      bitmap_set(used_block_bitmap, inode.direct_offset[block_idx], false);
+    }
+    block_idx++;
+    offset_in_block = 0;
+  }
+  if (inode.single_indirect_offset) {
+    if (clear_indirect_block(inode.single_indirect_offset,
+                             SINGLE_INDIRECTION)) {
+      fprintf(stderr, "fs_truncate: failed to clear single indirect block\n");
+      return -1;
+    }
+    inode.single_indirect_offset = 0;
+  }
+  if (inode.double_indirect_offset) {
+    if (clear_indirect_block(inode.double_indirect_offset,
+                             DOUBLE_INDIRECTION)) {
+      fprintf(stderr, "fs_truncate: failed to clear double indirect block\n");
+      return -1;
+    }
+    inode.double_indirect_offset = 0;
+  }
+  fd.offset = length;
   return 0;
 }
