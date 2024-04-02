@@ -1,5 +1,6 @@
 #include "../fs.h"
 #include <assert.h>
+#include <stdlib.h>
 
 #define BYTES_KB 1024
 #define BYTES_MB (1024 * BYTES_KB)
@@ -11,9 +12,9 @@ int main() {
   const char *disk_name = "test_fs";
   char write_buf0[BYTES_MB];
   char write_buf1[BYTES_MB];
-  char medium_buf[BYTES_30MB];
-  char big_buf[BYTES_40MB];
-  char read_buf[BYTES_40MB];
+  char *medium_buf;
+  char *big_buf;
+  char *read_buf;
   const char *file_names[NUM_FILES] = {
       "1",  "2",  "3",  "4",  "5",  "6",  "7",  "8",  "9",  "10", "11",
       "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
@@ -21,14 +22,17 @@ int main() {
   int file_index = 0;
   int fds[NUM_FILES];
 
+  medium_buf = malloc(BYTES_30MB);
+  big_buf = malloc(BYTES_40MB);
+  read_buf = malloc(BYTES_40MB);
+  memset(write_buf0, 'a', sizeof(write_buf0));
+  memset(write_buf1, 'b', sizeof(write_buf1));
+  memset(medium_buf, 'c', BYTES_30MB);
+  memset(big_buf, 'd', BYTES_40MB);
+
   remove(disk_name); // remove disk if it exists
   assert(make_fs(disk_name) == 0);
   assert(mount_fs(disk_name) == 0);
-
-  memset(write_buf0, 'a', sizeof(write_buf0));
-  memset(write_buf1, 'b', sizeof(write_buf1));
-  memset(medium_buf, 'c', sizeof(big_buf));
-  memset(big_buf, 'd', sizeof(big_buf));
 
   // 9.3) Create 1 MiB file, write 1 MiB data --> check size
   assert(fs_create(file_names[file_index]) == 0);
@@ -79,7 +83,7 @@ int main() {
   }
   for (int i = 0; i < 16; i++) {
     assert(fs_lseek(fds[file_index], 0) == 0);
-    memset(read_buf, 0, sizeof(read_buf));
+    memset(read_buf, 0, BYTES_40MB);
     assert(fs_read(fds[file_index], read_buf, BYTES_MB) == BYTES_MB);
     if (i % 2 == 0) {
       assert(memcmp(read_buf, write_buf0, BYTES_MB) == 0);
@@ -97,7 +101,7 @@ int main() {
   assert(fs_write(fds[file_index], medium_buf, BYTES_30MB) == BYTES_30MB);
   assert(fs_get_filesize(fds[file_index]) == BYTES_30MB);
   assert(fs_lseek(fds[file_index], 0) == 0);
-  memset(read_buf, 0, sizeof(read_buf));
+  memset(read_buf, 0, BYTES_40MB);
   assert(fs_read(fds[file_index], read_buf, BYTES_30MB) == BYTES_30MB);
   assert(memcmp(read_buf, medium_buf, BYTES_30MB) == 0);
   assert(fs_close(fds[file_index]) == 0);
@@ -110,7 +114,7 @@ int main() {
   assert(fs_write(fds[file_index], big_buf, BYTES_40MB) == BYTES_40MB);
   assert(fs_get_filesize(fds[file_index]) == BYTES_40MB);
   assert(fs_lseek(fds[file_index], 0) == 0);
-  memset(read_buf, 0, sizeof(read_buf));
+  memset(read_buf, 0, BYTES_40MB);
   assert(fs_read(fds[file_index], read_buf, BYTES_40MB) == BYTES_40MB);
   assert(memcmp(read_buf, big_buf, BYTES_40MB) == 0);
   assert(fs_close(fds[file_index]) == 0);
@@ -119,4 +123,7 @@ int main() {
   // Clean up
   assert(umount_fs(disk_name) == 0);
   assert(remove(disk_name) == 0);
+  free(medium_buf);
+  free(big_buf);
+  free(read_buf);
 }
