@@ -31,11 +31,11 @@ int main() {
   assert(fs_close(fds[0]) == -1); // fd not in use
 
   // open multiple files
-  for (int i = 0; i < 64; i++) {
+  for (int i = 0; i < MAX_FD; i++) {
     assert(fs_create(file_names[i]) == 0);
     fds[i] = fs_open(file_names[i]);
   }
-  for (int i = 0; i < 64; i++) {
+  for (int i = 0; i < MAX_FD; i++) {
     assert(fs_close(fds[i]) == 0);
   }
 

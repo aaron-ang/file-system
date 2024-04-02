@@ -14,7 +14,7 @@ int main() {
 
   int fd = fs_open(file_name);
   assert(fd >= 0);
-  assert(fs_read(fd, read_buf, sizeof(read_buf)) == -1); // file not written
+  assert(fs_read(fd, read_buf, sizeof(read_buf)) == 0); // empty file
   assert(fs_write(fd, write_buf, sizeof(write_buf)) == sizeof(write_buf));
 
   assert(fs_lseek(fd, -1) == -1); // invalid offset
