@@ -853,6 +853,7 @@ int fs_truncate(int fildes, off_t length) {
     }
     inode->double_indirect_offset = 0;
   }
-  fd->offset = length;
+  fd->offset = MIN(fd->offset, length);
+  inode->file_size = length;
   return 0;
 }
