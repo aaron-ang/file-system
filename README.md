@@ -24,9 +24,9 @@ Max file size supported: 20MB
 2. test_mount_umount
 3. test_fs_create
 4. test_listfiles
-5. test_write
+5. test_fs_write
 6. test_getfilesize
-7. test_read
+7. test_fs_read
 8. test_open_close
-9. test_delete
+9. test_fs_delete
 10. test_truncate
