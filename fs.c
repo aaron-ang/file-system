@@ -208,6 +208,8 @@ int add_inode_data_block(uint16_t inum, int block_num) {
       fprintf(stderr, "add_inode_offset: block_write failed\n");
       return -1;
     }
+    bitmap_set(used_block_bitmap, first_indirect_block_num, 1);
+    bitmap_set(used_block_bitmap, second_indirect_block_num, 1);
     return 0;
   }
   if (block_read(inode.double_indirect_offset, &indirect_block_buffer) == -1) {
@@ -232,6 +234,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
         fprintf(stderr, "add_inode_offset: block_write failed\n");
         return -1;
       }
+      bitmap_set(used_block_bitmap, indirect_block_num, 1);
       return 0;
     }
     if (block_read(indirect_block_buffer.block_offsets[i],
@@ -355,7 +358,11 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
         break;
       }
       block_num = get_data_block_num(inum, fd->offset);
-      if (block_num <= 0) { // allocate new data block
+      if (block_num == -1) {
+        fprintf(stderr, "write_bytes: failed to get data block number\n");
+        return -1;
+      }
+      if (block_num == 0) { // allocate new data block
         block_num = get_unused_data_block();
         assert(block_num >= sb.data_offset);
         if (add_inode_data_block(inum, block_num)) {
@@ -723,11 +730,21 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
     return -1;
   };
   int start_block = get_data_block_num(fd.inode_number, fd.offset);
-  if (start_block <= 0) {
-    fprintf(stderr, "fs_read: no data block found for offset\n");
+  if (start_block == -1) {
+    fprintf(stderr, "fs_write: failed to get data block number\n");
     return -1;
   }
+  if (start_block == 0) {
+    start_block = get_unused_data_block();
+    if (start_block <= 0) {
+      fprintf(stderr, "fs_write: failed to get unused data block\n");
+      return -1;
+    }
+  }
   size_t bytes_written = write_bytes(start_block, &fd, buf, nbyte);
+  if (bytes_written >= 0) {
+    bitmap_set(used_block_bitmap, start_block, true);
+  }
   return bytes_written;
 }
 
