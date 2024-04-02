@@ -27,4 +27,6 @@ int main() {
     free(file_list[i]);
   }
   free(file_list);
+  assert(umount_fs(disk_name) == 0);
+  assert(remove(disk_name) == 0);
 }

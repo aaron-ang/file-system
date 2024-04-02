@@ -15,6 +15,7 @@ int main() {
   fp = fopen(disk_name, "r");
   assert(fp != NULL);
 
+  // check that some metadata is written to the disk
   bool non_zero_byte = false;
   char byte;
   while ((byte = fgetc(fp)) != EOF) {
