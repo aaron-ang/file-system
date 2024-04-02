@@ -35,6 +35,7 @@ int main() {
     assert(fs_create(file_names[i]) == 0);
     fds[i] = fs_open(file_names[i]);
   }
+  assert(fs_open(file_name) == -1); // fd limit reached
   for (int i = 0; i < MAX_FD; i++) {
     assert(fs_close(fds[i]) == 0);
   }
