@@ -740,6 +740,7 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
       fprintf(stderr, "fs_write: failed to get unused data block\n");
       return -1;
     }
+    add_inode_data_block(fd->inode_number, start_block);
   }
   size_t bytes_written = write_bytes(start_block, fd, buf, nbyte);
   if (bytes_written >= 0) {
