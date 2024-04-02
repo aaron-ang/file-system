@@ -644,6 +644,15 @@ int fs_create(const char *name) {
   assert(inum != -1);
   struct dir_entry *dentry = claim_dentry(inum, name);
   assert(dentry != NULL);
+  int free_block_num = get_unused_data_block();
+  if (free_block_num == -1) {
+    fprintf(stderr, "fs_create: no free blocks\n");
+    return -1;
+  }
+  bitmap_set(used_block_bitmap, free_block_num, true);
+  struct inode *inode = &inode_table[inum];
+  inode->direct_offset[0] = free_block_num;
+  inode->file_size = 0;
   return 0;
 }
 
@@ -741,11 +750,9 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
       return -1;
     }
     add_inode_data_block(fd->inode_number, start_block);
-  }
-  size_t bytes_written = write_bytes(start_block, fd, buf, nbyte);
-  if (bytes_written >= 0) {
     bitmap_set(used_block_bitmap, start_block, true);
   }
+  size_t bytes_written = write_bytes(start_block, fd, buf, nbyte);
   return bytes_written;
 }
 
