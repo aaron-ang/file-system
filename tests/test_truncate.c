@@ -6,7 +6,7 @@ int main() {
   const char *file_name = "test_file";
   char write_buf[] = "hello world";
   char truncated[] = "hello";
-  char read_buf[sizeof(write_buf)];
+  char read_buf[sizeof(write_buf)] = {0};
 
   remove(disk_name); // remove disk if it exists
   assert(make_fs(disk_name) == 0);
@@ -21,9 +21,11 @@ int main() {
   assert(fs_truncate(fd, -1) == -1);            // invalid size
   assert(fs_truncate(fd, file_size + 1) == -1); // invalid size
 
-  assert(fs_truncate(fd, sizeof(truncated)) == 0);
-  assert(fs_get_filesize(fd) == sizeof(truncated));
-  assert(fs_read(fd, read_buf, sizeof(read_buf)) == sizeof(truncated));
+  off_t new_size = strlen(truncated);
+  assert(fs_truncate(fd, new_size) == 0);
+  assert(fs_get_filesize(fd) == new_size);
+  assert(fs_lseek(fd, 0) == 0);
+  assert(fs_read(fd, read_buf, sizeof(read_buf)) == new_size);
   assert(strcmp(read_buf, truncated) == 0);
   assert(fs_close(fd) == 0);
   assert(fs_truncate(fd, 0) == -1); // file not open

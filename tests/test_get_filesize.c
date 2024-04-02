@@ -14,7 +14,7 @@ int main() {
   int fd = fs_open(file_name);
   assert(fd >= 0);
 
-  assert(fs_write(fd, buf, sizeof(buf)) == 0);
+  assert(fs_write(fd, buf, sizeof(buf)) == sizeof(buf));
   assert(fs_get_filesize(fd) == sizeof(buf));
   assert(fs_close(fd) == 0);
 
