@@ -5,7 +5,7 @@ TESTDIR=tests
 test_files=test_make_fs test_mount_umount test_fs_create \
  test_listfiles test_open_close test_fs_write \
  test_get_filesize test_fs_read test_fs_delete \
- test_truncate test_big_writes
+ test_truncate test_big_writes test_bonus
 
 test_files := $(addprefix $(TESTDIR)/,$(test_files))
 objects := $(addsuffix .o,$(test_files))
