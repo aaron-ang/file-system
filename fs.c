@@ -160,6 +160,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
     }
   }
   union fs_block indirect_block_buffer;
+  memset(&indirect_block_buffer, 0, BLOCK_SIZE);
   if (inode->single_indirect_offset == 0) {
     int new_block_num = claim_unused_data_block();
     if (new_block_num == -1) {
@@ -192,16 +193,16 @@ int add_inode_data_block(uint16_t inum, int block_num) {
   if (inode->double_indirect_offset == 0) {
     int first_indirect_block_num = claim_unused_data_block();
     int second_indirect_block_num = claim_unused_data_block();
-    if (first_indirect_block_num == -1 || second_indirect_block_num == -1) {
+    if (first_indirect_block_num <= 0 || second_indirect_block_num <= 0) {
       return -1;
     }
+    inode->double_indirect_offset = first_indirect_block_num;
     // first indirect block
     indirect_block_buffer.block_offsets[0] = second_indirect_block_num;
     if (block_write(first_indirect_block_num, &indirect_block_buffer) == -1) {
       fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
-    inode->double_indirect_offset = first_indirect_block_num;
     // second indirect block
     indirect_block_buffer.block_offsets[0] = block_num;
     if (block_write(second_indirect_block_num, &indirect_block_buffer) == -1) {
@@ -215,6 +216,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
     return -1;
   }
   union fs_block second_indirect_block;
+  memset(&second_indirect_block, 0, BLOCK_SIZE);
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
     if (indirect_block_buffer.block_offsets[i] == 0) {
       int indirect_block_num = claim_unused_data_block();
@@ -400,7 +402,7 @@ int clear_indirect_block(int block_num, int indirection_level) {
     return -1;
   }
   union fs_block empty_block;
-  memset(&empty_block, 0, sizeof(empty_block));
+  memset(&empty_block, 0, BLOCK_SIZE);
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
     if (block_buffer.block_offsets[i]) {
       if (indirection_level > SINGLE_INDIRECTION) {
@@ -447,6 +449,7 @@ int make_fs(const char *disk_name) {
 
   // write super block
   union fs_block block_buffer;
+  memset(&block_buffer, 0, BLOCK_SIZE);
   block_buffer.super = sb;
   if (block_write(0, &block_buffer)) {
     fprintf(stderr, "make_fs: failed to write super block\n");
@@ -533,6 +536,7 @@ int umount_fs(const char *disk_name) {
   }
 
   union fs_block block_buffer;
+  memset(&block_buffer, 0, BLOCK_SIZE);
 
   // write super block
   block_buffer.super = sb;
