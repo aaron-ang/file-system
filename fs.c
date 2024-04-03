@@ -277,7 +277,9 @@ int get_data_block_num(uint16_t inum, int file_offset) {
 
   // single indirect
   if (block_idx < DIRECT_OFFSETS_PER_BLOCK) {
-    assert(inode->single_indirect_offset != 0);
+    if (inode->single_indirect_offset == 0) {
+      return 0;
+    }
     if (block_read(inode->single_indirect_offset, &block_buffer)) {
       fprintf(stderr,
               "get_data_block_num: failed to read single indirect block\n");
@@ -288,7 +290,9 @@ int get_data_block_num(uint16_t inum, int file_offset) {
 
   // double indirect
   block_idx -= DIRECT_OFFSETS_PER_BLOCK;
-  assert(inode->double_indirect_offset != 0);
+  if (inode->double_indirect_offset == 0) {
+    return 0;
+  }
   if (block_read(inode->double_indirect_offset, &block_buffer)) {
     fprintf(stderr,
             "get_data_block_num: failed to read double indirect block\n");
