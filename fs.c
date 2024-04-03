@@ -297,8 +297,8 @@ int get_data_block_num(uint16_t inum, int file_offset) {
             "get_data_block_num: failed to read double indirect block\n");
     return -1;
   }
-  block_idx /= DIRECT_OFFSETS_PER_BLOCK;
-  if (block_read(block_buffer.block_offsets[block_idx], &block_buffer)) {
+  int block_offset = block_idx / DIRECT_OFFSETS_PER_BLOCK;
+  if (block_read(block_buffer.block_offsets[block_offset], &block_buffer)) {
     fprintf(stderr,
             "get_data_block_num: failed to read single indirect block\n");
     return -1;
@@ -360,6 +360,7 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
       if (bitmap_full(used_block_bitmap, sizeof(used_block_bitmap))) {
         break;
       }
+      // TODO: somehow block number is not updated in double indirect block
       block_num = get_data_block_num(inum, fd->offset);
       if (block_num == -1) {
         fprintf(stderr, "write_bytes: failed to get data block number\n");
@@ -367,6 +368,7 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
       }
       if (block_num == 0) { // allocate new data block
         block_num = claim_unused_data_block();
+        // TODO: somehow block number is not updated in double indirect block
         if (add_inode_data_block(inum, block_num)) {
           fprintf(stderr,
                   "write_bytes: failed to assign data block %d to inode\n",
@@ -417,6 +419,7 @@ int clear_indirect_block(int block_num, int indirection_level) {
                 block_buffer.block_offsets[i]);
         return -1;
       }
+      bitmap_set(used_block_bitmap, block_buffer.block_offsets[i], 0);
     }
   }
   if (block_write(block_num, &empty_block)) {
@@ -687,8 +690,8 @@ int fs_delete(const char *name) {
                 inode->direct_offset[i]);
         return -1;
       }
-      bitmap_set(used_block_bitmap, inode->direct_offset[i], 0);
       inode->direct_offset[i] = 0;
+      bitmap_set(used_block_bitmap, inode->direct_offset[i], 0);
     }
   }
   if (inode->single_indirect_offset) {
@@ -769,6 +772,7 @@ int fs_get_filesize(int fildes) {
 }
 
 int fs_listfiles(char ***files) {
+  // TODO: not passing the test
   char **file_name_ptr = *files;
   for (int i = 0; i < MAX_FILES; i++) {
     if (dir_table[i].is_used) {
