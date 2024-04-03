@@ -2,7 +2,7 @@
 #include "disk.h"
 
 #define MAX_FILES 64
-#define MAX_FILE_SIZE ((1 << 20) * 20) // 20 MB
+#define MAX_FILE_SIZE ((1 << 20) * 40) // 40 MiB
 #define MAX_FILE_NAME_CHAR 16
 #define DIRECT_OFFSETS_PER_INODE 12
 #define DIRECT_OFFSETS_PER_BLOCK (BLOCK_SIZE / sizeof(uint16_t))
@@ -244,7 +244,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
     for (int j = 0; j < DIRECT_OFFSETS_PER_BLOCK; j++) {
       if (second_indirect_block.block_offsets[j] == 0) {
         second_indirect_block.block_offsets[j] = block_num;
-        if (block_write(second_indirect_block.block_offsets[i],
+        if (block_write(indirect_block_buffer.block_offsets[i],
                         &second_indirect_block) == -1) {
           fprintf(stderr, "add_inode_data_block: block_write failed\n");
           return -1;
@@ -384,12 +384,12 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
     bytes_written += bytes_to_write;
     offset_in_block += bytes_to_write;
     fd->offset += bytes_to_write;
-    inode_table[inum].file_size = MAX(inode_table[inum].file_size, fd->offset);
   }
   if (block_write(block_num, &block_buffer)) {
     fprintf(stderr, "write_bytes: failed to write data block\n");
     return -1;
   }
+  inode_table[inum].file_size = MAX(inode_table[inum].file_size, fd->offset);
   return bytes_written;
 }
 

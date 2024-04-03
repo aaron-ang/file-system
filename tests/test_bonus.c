@@ -14,6 +14,7 @@ int main() {
   char *big_buf;
   char *read_buf;
   int fd;
+  int bytes_written;
 
   medium_buf = malloc(BYTES_30MB);
   big_buf = malloc(BYTES_40MB);
@@ -29,7 +30,8 @@ int main() {
   assert(fs_create(file_name) == 0);
   fd = fs_open(file_name);
   assert(fd >= 0);
-  assert(fs_write(fd, medium_buf, BYTES_30MB) == BYTES_30MB);
+  bytes_written = fs_write(fd, medium_buf, BYTES_30MB);
+  assert(bytes_written == BYTES_30MB);
   assert(fs_get_filesize(fd) == BYTES_30MB);
   assert(fs_lseek(fd, 0) == 0);
   memset(read_buf, 0, BYTES_40MB);
@@ -42,7 +44,8 @@ int main() {
   assert(fs_create(file_name) == 0);
   fd = fs_open(file_name);
   assert(fd >= 0);
-  assert(fs_write(fd, big_buf, BYTES_40MB) == BYTES_40MB);
+  bytes_written = fs_write(fd, big_buf, BYTES_40MB);
+  assert(bytes_written == BYTES_40MB);
   assert(fs_get_filesize(fd) == BYTES_40MB);
   assert(fs_lseek(fd, 0) == 0);
   memset(read_buf, 0, BYTES_40MB);
