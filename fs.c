@@ -78,7 +78,7 @@ static bool bitmap_test(const uint8_t *bitmap, int idx);
 static void bitmap_set(uint8_t *bitmap, int idx, bool val);
 static bool bitmap_full(const uint8_t *bitmap, int size);
 static int claim_inum_from_bitmap();
-static int get_unused_data_block();
+static int claim_unused_data_block();
 static int add_inode_data_block(uint16_t inum, int block_num);
 static int get_data_block_num(uint16_t inum, int file_offset);
 static size_t read_bytes(int block_num, struct file_descriptor *fd, void *buf,
@@ -141,9 +141,10 @@ int claim_inum_from_bitmap() {
   return -1;
 }
 
-int get_unused_data_block() {
+int claim_unused_data_block() {
   for (int i = sb.data_offset; i < DISK_BLOCKS; i++) {
     if (bitmap_test(used_block_bitmap, i) == 0) {
+      bitmap_set(used_block_bitmap, i, 1);
       return i;
     }
   }
@@ -160,21 +161,20 @@ int add_inode_data_block(uint16_t inum, int block_num) {
   }
   union fs_block indirect_block_buffer;
   if (inode->single_indirect_offset == 0) {
-    int new_block_num = get_unused_data_block();
+    int new_block_num = claim_unused_data_block();
     if (new_block_num == -1) {
       return -1;
     }
     indirect_block_buffer.block_offsets[0] = block_num;
     if (block_write(new_block_num, &indirect_block_buffer) == -1) {
-      fprintf(stderr, "add_inode_offset: block_write failed\n");
+      fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
     inode->single_indirect_offset = new_block_num;
-    bitmap_set(used_block_bitmap, new_block_num, 1);
     return 0;
   }
   if (block_read(inode->single_indirect_offset, &indirect_block_buffer) == -1) {
-    fprintf(stderr, "add_inode_offset: block_read failed\n");
+    fprintf(stderr, "add_inode_data_block: block_read failed\n");
     return -1;
   }
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
@@ -182,7 +182,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
       indirect_block_buffer.block_offsets[i] = block_num;
       if (block_write(inode->single_indirect_offset, &indirect_block_buffer) ==
           -1) {
-        fprintf(stderr, "add_inode_offset: block_write failed\n");
+        fprintf(stderr, "add_inode_data_block: block_write failed\n");
         return -1;
       }
       return 0;
@@ -190,56 +190,53 @@ int add_inode_data_block(uint16_t inum, int block_num) {
   }
   memset(&indirect_block_buffer, 0, BLOCK_SIZE);
   if (inode->double_indirect_offset == 0) {
-    int first_indirect_block_num = get_unused_data_block();
-    int second_indirect_block_num = get_unused_data_block();
+    int first_indirect_block_num = claim_unused_data_block();
+    int second_indirect_block_num = claim_unused_data_block();
     if (first_indirect_block_num == -1 || second_indirect_block_num == -1) {
       return -1;
     }
     // first indirect block
     indirect_block_buffer.block_offsets[0] = second_indirect_block_num;
     if (block_write(first_indirect_block_num, &indirect_block_buffer) == -1) {
-      fprintf(stderr, "add_inode_offset: block_write failed\n");
+      fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
     inode->double_indirect_offset = first_indirect_block_num;
     // second indirect block
     indirect_block_buffer.block_offsets[0] = block_num;
     if (block_write(second_indirect_block_num, &indirect_block_buffer) == -1) {
-      fprintf(stderr, "add_inode_offset: block_write failed\n");
+      fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
-    bitmap_set(used_block_bitmap, first_indirect_block_num, 1);
-    bitmap_set(used_block_bitmap, second_indirect_block_num, 1);
     return 0;
   }
   if (block_read(inode->double_indirect_offset, &indirect_block_buffer) == -1) {
-    fprintf(stderr, "add_inode_offset: block_read failed\n");
+    fprintf(stderr, "add_inode_data_block: block_read failed\n");
     return -1;
   }
   union fs_block second_indirect_block;
   for (int i = 0; i < DIRECT_OFFSETS_PER_BLOCK; i++) {
     if (indirect_block_buffer.block_offsets[i] == 0) {
-      int indirect_block_num = get_unused_data_block();
+      int indirect_block_num = claim_unused_data_block();
       if (indirect_block_num == -1) {
         return -1;
       }
       indirect_block_buffer.block_offsets[i] = indirect_block_num;
       if (block_write(inode->double_indirect_offset, &indirect_block_buffer) ==
           -1) {
-        fprintf(stderr, "add_inode_offset: block_write failed\n");
+        fprintf(stderr, "add_inode_data_block: block_write failed\n");
         return -1;
       }
       second_indirect_block.block_offsets[0] = block_num;
       if (block_write(indirect_block_num, &second_indirect_block) == -1) {
-        fprintf(stderr, "add_inode_offset: block_write failed\n");
+        fprintf(stderr, "add_inode_data_block: block_write failed\n");
         return -1;
       }
-      bitmap_set(used_block_bitmap, indirect_block_num, 1);
       return 0;
     }
     if (block_read(indirect_block_buffer.block_offsets[i],
                    &second_indirect_block) == -1) {
-      fprintf(stderr, "add_inode_offset: block_read failed\n");
+      fprintf(stderr, "add_inode_data_block: block_read failed\n");
       return -1;
     }
     for (int j = 0; j < DIRECT_OFFSETS_PER_BLOCK; j++) {
@@ -247,7 +244,7 @@ int add_inode_data_block(uint16_t inum, int block_num) {
         second_indirect_block.block_offsets[j] = block_num;
         if (block_write(second_indirect_block.block_offsets[i],
                         &second_indirect_block) == -1) {
-          fprintf(stderr, "add_inode_offset: block_write failed\n");
+          fprintf(stderr, "add_inode_data_block: block_write failed\n");
           return -1;
         }
         return 0;
@@ -367,7 +364,7 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
         return -1;
       }
       if (block_num == 0) { // allocate new data block
-        block_num = get_unused_data_block();
+        block_num = claim_unused_data_block();
         assert(block_num >= sb.data_offset);
         if (add_inode_data_block(inum, block_num)) {
           fprintf(stderr,
@@ -375,7 +372,6 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
                   block_num);
           return -1;
         }
-        bitmap_set(used_block_bitmap, block_num, 1);
       }
       offset_in_block = 0;
     }
@@ -648,12 +644,11 @@ int fs_create(const char *name) {
   assert(inum != -1);
   struct dir_entry *dentry = claim_dentry(inum, name);
   assert(dentry != NULL);
-  int free_block_num = get_unused_data_block();
+  int free_block_num = claim_unused_data_block();
   if (free_block_num == -1) {
     fprintf(stderr, "fs_create: no free blocks\n");
     return -1;
   }
-  bitmap_set(used_block_bitmap, free_block_num, true);
   struct inode *inode = &inode_table[inum];
   inode->direct_offset[0] = free_block_num;
   inode->file_size = 0;
@@ -687,7 +682,7 @@ int fs_delete(const char *name) {
                 inode->direct_offset[i]);
         return -1;
       }
-      bitmap_set(used_block_bitmap, inode->direct_offset[i], false);
+      bitmap_set(used_block_bitmap, inode->direct_offset[i], 0);
       inode->direct_offset[i] = 0;
     }
   }
@@ -748,13 +743,12 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
     return -1;
   }
   if (start_block == 0) {
-    start_block = get_unused_data_block();
+    start_block = claim_unused_data_block();
     if (start_block <= 0) {
       fprintf(stderr, "fs_write: failed to get unused data block\n");
       return -1;
     }
     add_inode_data_block(fd->inode_number, start_block);
-    bitmap_set(used_block_bitmap, start_block, true);
   }
   size_t bytes_written = write_bytes(start_block, fd, buf, nbyte);
   return bytes_written;
@@ -833,8 +827,9 @@ int fs_truncate(int fildes, off_t length) {
     }
     memset(block_buffer.data + offset_in_block, 0,
            BLOCK_SIZE - offset_in_block);
-    if (offset_in_block == 0)
-      bitmap_set(used_block_bitmap, cur_block_num, false);
+    if (offset_in_block == 0) {
+      bitmap_set(used_block_bitmap, cur_block_num, 0);
+    }
     offset += BLOCK_SIZE - offset_in_block;
   }
   // walk inode table and free entries starting from length
@@ -843,7 +838,7 @@ int fs_truncate(int fildes, off_t length) {
   while (block_idx < DIRECT_OFFSETS_PER_INODE) {
     if (offset_in_block == 0) {
       inode->direct_offset[block_idx] = 0;
-      bitmap_set(used_block_bitmap, inode->direct_offset[block_idx], false);
+      bitmap_set(used_block_bitmap, inode->direct_offset[block_idx], 0);
     }
     block_idx++;
     offset_in_block = 0;
