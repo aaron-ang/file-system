@@ -321,7 +321,7 @@ size_t read_bytes(int block_num, struct file_descriptor *fd, void *buf,
   while (bytes_read < nbyte) {
     if (offset_in_block == BLOCK_SIZE) {
       block_num = get_data_block_num(fd->inode_number, fd->offset);
-      assert(block_num > 0);
+      assert(block_num >= sb.data_offset);
       if (block_read(block_num, &block_buffer)) {
         fprintf(stderr, "read_bytes: failed to read data block %d\n",
                 block_num);
@@ -367,7 +367,6 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
       }
       if (block_num == 0) { // allocate new data block
         block_num = claim_unused_data_block();
-        assert(block_num >= sb.data_offset);
         if (add_inode_data_block(inum, block_num)) {
           fprintf(stderr,
                   "write_bytes: failed to assign data block %d to inode\n",
@@ -375,6 +374,7 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
           return -1;
         }
       }
+      assert(block_num >= sb.data_offset);
       offset_in_block = 0;
     }
     size_t bytes_to_write =
@@ -653,6 +653,7 @@ int fs_create(const char *name) {
     fprintf(stderr, "fs_create: no free blocks\n");
     return -1;
   }
+  assert(free_block_num >= sb.data_offset);
   struct inode *inode = &inode_table[inum];
   inode->direct_offset[0] = free_block_num;
   inode->file_size = 0;
@@ -823,6 +824,7 @@ int fs_truncate(int fildes, off_t length) {
   int cur_block_num;
   union fs_block block_buffer;
   while ((cur_block_num = get_data_block_num(fd->inode_number, offset)) > 0) {
+    assert(cur_block_num >= sb.data_offset);
     uint16_t offset_in_block = offset % BLOCK_SIZE;
     if (block_read(cur_block_num, &block_buffer)) {
       fprintf(stderr, "fs_truncate: failed to read data block %d\n",
