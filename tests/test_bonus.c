@@ -1,6 +1,7 @@
 #include "../fs.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define BYTES_KB 1024
 #define BYTES_MB (1024 * BYTES_KB)
@@ -16,11 +17,16 @@ int main() {
   int fd;
   int bytes_written;
 
+  srand(time(NULL));
   medium_buf = malloc(BYTES_30MB);
   big_buf = malloc(BYTES_40MB);
   read_buf = malloc(BYTES_40MB);
-  memset(medium_buf, 'a', BYTES_30MB);
-  memset(big_buf, 'b', BYTES_40MB);
+  for (int i = 0; i < BYTES_30MB; i++) {
+    medium_buf[i] = 'A' + rand() % 26;
+  }
+  for (int i = 0; i < BYTES_40MB; i++) {
+    big_buf[i] = 'A' + rand() % 26;
+  }
 
   remove(disk_name); // remove disk if it exists
   assert(make_fs(disk_name) == 0);

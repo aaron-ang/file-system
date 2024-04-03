@@ -28,4 +28,6 @@ int main() {
   assert(umount_fs(disk_name) == 0); // unmount the disk
   assert(fs_create("65") == -1);     // disk not mounted
   assert(remove(disk_name) == 0);    // remove the disk
+
+  // 6.2) Create different amounts of files
 }
