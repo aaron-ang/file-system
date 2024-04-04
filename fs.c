@@ -303,8 +303,8 @@ int get_data_block_num(uint16_t inum, int file_offset) {
             "get_data_block_num: failed to read single indirect block\n");
     return -1;
   }
-  block_idx %= DIRECT_OFFSETS_PER_BLOCK;
-  return block_buffer.block_offsets[block_idx];
+  block_offset = block_idx % DIRECT_OFFSETS_PER_BLOCK;
+  return block_buffer.block_offsets[block_offset];
 }
 
 size_t read_bytes(int block_num, struct file_descriptor *fd, void *buf,
@@ -360,23 +360,23 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
       if (bitmap_full(used_block_bitmap, sizeof(used_block_bitmap))) {
         break;
       }
-      // TODO: somehow block number is not updated in double indirect block
-      block_num = get_data_block_num(inum, fd->offset);
-      if (block_num == -1) {
+      int next_block_num = get_data_block_num(inum, fd->offset);
+      if (next_block_num == -1) {
         fprintf(stderr, "write_bytes: failed to get data block number\n");
         return -1;
       }
-      if (block_num == 0) { // allocate new data block
-        block_num = claim_unused_data_block();
-        // TODO: somehow block number is not updated in double indirect block
-        if (add_inode_data_block(inum, block_num)) {
+      if (next_block_num == 0) { // allocate new data block
+        next_block_num = claim_unused_data_block();
+        if (add_inode_data_block(inum, next_block_num)) {
           fprintf(stderr,
                   "write_bytes: failed to assign data block %d to inode\n",
-                  block_num);
+                  next_block_num);
           return -1;
         }
       }
-      assert(block_num >= sb.data_offset);
+      assert(next_block_num >= sb.data_offset);
+      assert(next_block_num != block_num);
+      block_num = next_block_num;
       offset_in_block = 0;
     }
     size_t bytes_to_write =
