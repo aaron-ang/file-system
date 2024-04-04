@@ -1,5 +1,6 @@
 #include "fs.h"
 #include "disk.h"
+#include <stdlib.h>
 
 #define MAX_FILES 64
 #define MAX_FILE_SIZE ((1 << 20) * 40) // 40 MiB
@@ -106,7 +107,7 @@ struct dir_entry *claim_dentry(uint16_t inum, const char *name) {
     if (dir_table[i].is_used == false) {
       dir_table[i].is_used = true;
       dir_table[i].inode_number = inum;
-      memcpy(dir_table[i].name, name, strlen(name) + 1);
+      memcpy(dir_table[i].name, name, strlen(name));
       return &dir_table[i];
     }
   }
@@ -784,19 +785,18 @@ int fs_get_filesize(int fildes) {
 }
 
 int fs_listfiles(char ***files) {
-  char **file_name_arr = *files;
-  file_name_arr = malloc(MAX_FILES * sizeof(char *));
+  *files = calloc(MAX_FILES, sizeof(char *));
+  char **file_name_ptr = *files;
   for (int i = 0; i < MAX_FILES; i++) {
     if (dir_table[i].is_used) {
       if (strlen(dir_table[i].name) == 0) {
         fprintf(stderr, "fs_listfiles: invalid file name\n");
         return -1;
       }
-      *file_name_arr = strdup(dir_table[i].name);
-      (*file_name_arr)++;
+      *file_name_ptr = strdup(dir_table[i].name);
+      file_name_ptr++;
     }
   }
-  *file_name_arr = NULL;
   return 0;
 }
 

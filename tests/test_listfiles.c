@@ -20,13 +20,15 @@ int main() {
     assert(fs_create(file_names[i]) == 0);
   }
 
-  char **file_list = malloc(sizeof(char *) * 64);
-  assert(fs_listfiles(&file_list) == 0);
+  char ***file_list_ptr = malloc(sizeof(char *));
+  assert(fs_listfiles(file_list_ptr) == 0);
+  char **file_list = *file_list_ptr;
   for (int i = 0; i < 64; i++) {
     assert(strcmp(file_list[i], file_names[i]) == 0);
     free(file_list[i]);
   }
   free(file_list);
+  free(file_list_ptr);
   assert(umount_fs(disk_name) == 0);
   assert(remove(disk_name) == 0);
 }

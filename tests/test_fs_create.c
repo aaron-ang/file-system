@@ -13,11 +13,11 @@ int main() {
   };
 
   remove(disk_name);
-  assert(make_fs(disk_name) == 0);             // create disk
-  assert(fs_create(file_names[0]) == -1);      // disk not mounted
-  assert(mount_fs(disk_name) == 0);            // mount the disk
-  assert(fs_create("") == -1);                 // invalid file name
-  assert(fs_create("0123456789abcdef") == -1); // invalid file name
+  assert(make_fs(disk_name) == 0);              // create disk
+  assert(fs_create(file_names[0]) == -1);       // disk not mounted
+  assert(mount_fs(disk_name) == 0);             // mount the disk
+  assert(fs_create("") == -1);                  // invalid file name
+  assert(fs_create("0123456789abcdefg") == -1); // invalid file name
 
   for (int i = 0; i < 64; i++) {
     assert(fs_create(file_names[i]) == 0);  // create the file
