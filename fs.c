@@ -25,7 +25,7 @@ struct super_block {
 struct dir_entry {
   bool is_used;
   uint16_t inode_number;
-  const char *name;
+  char name[MAX_FILE_NAME_CHAR];
 };
 
 struct inode {
@@ -106,7 +106,7 @@ struct dir_entry *claim_dentry(uint16_t inum, const char *name) {
     if (dir_table[i].is_used == false) {
       dir_table[i].is_used = true;
       dir_table[i].inode_number = inum;
-      dir_table[i].name = name;
+      memcpy(dir_table[i].name, name, strlen(name) + 1);
       return &dir_table[i];
     }
   }
@@ -118,7 +118,7 @@ void clear_dentry(struct dir_entry *dentry) {
     return;
   dentry->is_used = false;
   dentry->inode_number = -1;
-  dentry->name = NULL;
+  memset(dentry->name, 0, sizeof(dentry->name));
 }
 
 bool bitmap_test(const uint8_t *bitmap, int idx) {
@@ -784,20 +784,19 @@ int fs_get_filesize(int fildes) {
 }
 
 int fs_listfiles(char ***files) {
-  // TODO: not passing the test
-  char **file_name_ptr = *files;
+  char **file_name_arr = *files;
+  file_name_arr = malloc(MAX_FILES * sizeof(char *));
   for (int i = 0; i < MAX_FILES; i++) {
     if (dir_table[i].is_used) {
-      const char *file_name = dir_table[i].name;
-      if (file_name == NULL) {
+      if (strlen(dir_table[i].name) == 0) {
         fprintf(stderr, "fs_listfiles: invalid file name\n");
         return -1;
       }
-      *file_name_ptr = strdup(file_name);
-      file_name_ptr++;
+      *file_name_arr = strdup(dir_table[i].name);
+      (*file_name_arr)++;
     }
   }
-  *file_name_ptr = NULL;
+  *file_name_arr = NULL;
   return 0;
 }
 
