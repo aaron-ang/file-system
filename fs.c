@@ -210,6 +210,7 @@ int add_inode_data_block(uint16_t inum, uint16_t block_num) {
       return -1;
     }
     // second indirect block
+    memset(&indirect_block_buffer, 0, BLOCK_SIZE);
     indirect_block_buffer.block_offsets[0] = block_num;
     if (block_write(second_indirect_block_num, &indirect_block_buffer) == -1) {
       fprintf(stderr, "add_inode_data_block: block_write failed\n");
@@ -368,6 +369,7 @@ size_t write_bytes(int block_num, struct file_descriptor *fd, const void *buf,
         fprintf(stderr, "write_bytes: failed to write data block\n");
         return -1;
       }
+      memset(&block_buffer, 0, sizeof(block_buffer));
       if (bitmap_full(used_block_bitmap, sizeof(used_block_bitmap))) {
         break;
       }
@@ -477,7 +479,8 @@ int make_fs(const char *disk_name) {
   memset(&block_buffer, 0, BLOCK_SIZE);
   memcpy(block_buffer.used_block_bitmap, used_block_bitmap,
          sizeof(used_block_bitmap));
-  if (block_write(sb.used_block_bitmap_offset, &block_buffer)) {
+  if (block_write(sb.used_block_bitmap_offset,
+                  &block_buffer.used_block_bitmap)) {
     fprintf(stderr, "make_fs: failed to write used block bitmap\n");
     return -1;
   }
