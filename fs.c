@@ -169,16 +169,16 @@ int add_inode_data_block(uint16_t inum, uint16_t block_num) {
   union fs_block indirect_block_buffer;
   memset(&indirect_block_buffer, 0, BLOCK_SIZE);
   if (inode->single_indirect_offset == 0) {
-    int new_block_num = claim_unused_data_block();
-    if (new_block_num == -1) {
+    int indirect_block_num = claim_unused_data_block();
+    if (indirect_block_num == -1) {
       return -1;
     }
     indirect_block_buffer.block_offsets[0] = block_num;
-    if (block_write(new_block_num, &indirect_block_buffer) == -1) {
+    if (block_write(indirect_block_num, &indirect_block_buffer) == -1) {
       fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
-    inode->single_indirect_offset = new_block_num;
+    inode->single_indirect_offset = indirect_block_num;
     return 0;
   }
   if (block_read(inode->single_indirect_offset, &indirect_block_buffer) == -1) {
@@ -206,7 +206,8 @@ int add_inode_data_block(uint16_t inum, uint16_t block_num) {
     inode->double_indirect_offset = first_indirect_block_num;
     // first indirect block
     indirect_block_buffer.block_offsets[0] = second_indirect_block_num;
-    if (block_write(first_indirect_block_num, &indirect_block_buffer) == -1) {
+    if (block_write(inode->double_indirect_offset, &indirect_block_buffer) ==
+        -1) {
       fprintf(stderr, "add_inode_data_block: block_write failed\n");
       return -1;
     }
@@ -237,8 +238,9 @@ int add_inode_data_block(uint16_t inum, uint16_t block_num) {
         fprintf(stderr, "add_inode_data_block: block_write failed\n");
         return -1;
       }
-      second_indirect_block.block_offsets[0] = block_num;
-      if (block_write(indirect_block_num, &second_indirect_block) == -1) {
+      memset(&indirect_block_buffer, 0, BLOCK_SIZE);
+      indirect_block_buffer.block_offsets[0] = block_num;
+      if (block_write(indirect_block_num, &indirect_block_buffer) == -1) {
         fprintf(stderr, "add_inode_data_block: block_write failed\n");
         return -1;
       }
