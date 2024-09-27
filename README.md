@@ -1,4 +1,10 @@
-# EC440: File System
+# Unix File System
+
+This project implements a simple file system (using inodes) on top of a virtual disk.
+
+The virtual disk has 8,192 blocks and is a single file stored on the "real" file system provided by the Linux OS.
+
+Each block holds 4KB.
 
 ## Layout of blocks
 
